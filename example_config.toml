@@ -1,4 +1,4 @@
-# tvrenamer configuration for The Rookie
+# tvrenamer configuration for renaming TV show video files with episode titles from online metadata providers.
 #
 # All values here act as defaults. Any CLI flag overrides the corresponding
 # config value. Config keys match their CLI flag names:
