@@ -207,7 +207,7 @@ If the filename lacks a Show Name or Season number (e.g., `/My Show/Season 1/Ep0
 1. **Filename Inspection:** Search for Show Name and SxxExx tag in the file string.
 2. **Parent Directory Inspection:** If Season is missing, inspect the immediate parent directory name for `Season X` or `S01`.
 3. **Grandparent Directory Inspection:** If the parent folder is a Season folder, extract the Show Name from the grandparent folder.
-4. **Season Suffix Stripping:** If a directory name contains both a show name and a season suffix (e.g., `The Rookie Season 08`), the season portion is stripped and the remaining text used as the show name. This handles common media library layouts where each season has its own folder named `{Show} Season {N}`.
+4. **Season Suffix Stripping:** If a directory name contains both a show name and a season suffix (e.g., `A Show Season 08`), the season portion is stripped and the remaining text used as the show name. This handles common media library layouts where each season has its own folder named `{Show} Season {N}`.
 5. **Root Directory Fallback:** When the scan root IS the show folder (files are at `root/Season N/file.mkv` with no grandparent), the root directory's own name is used as the show name (with season suffix stripping applied).
 6. **Directory Blacklist Guard:** Ignore generic folder names like `Downloads`, `TV Shows`, `Completed`, or `Desktop`.
 
@@ -386,10 +386,10 @@ space_replacement = "underscore"
 
 With the above, a generated file will be:
 
-- Directory: `/home/ben/Videos/Kodi/The Rookie/`
-- Filename: `The_Rookie-S06E06-Secrets_and_Lies.mkv`
+- Directory: `~Videos/A Show/`
+- Filename: `A_Show-S06E06-Beeps_and_Boops.mkv`
 
-Directory components remain: `/home/ben/Videos/Kodi/The Rookie/`
+Directory components remain: `/home/ben/Videos/Kodi/A Show/`
 
 ---
 

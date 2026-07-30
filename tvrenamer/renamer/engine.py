@@ -110,7 +110,7 @@ def _is_season_dir(name: str) -> Optional[int]:
     return None
 
 
-# Pattern for season suffix embedded in a directory name like "The Rookie Season 08"
+# Pattern for season suffix embedded in a directory name like "A Show Season 08"
 _SEASON_SUFFIX_RE = re.compile(
     r"^(?P<show>.+?)\s*[\s._-]*(?:season[\s._-]*\d{1,2}|[sS]\d{1,2})$", re.IGNORECASE
 )
@@ -120,7 +120,7 @@ def _extract_show_from_dir_name(name: str) -> str:
     """Extract show name from a directory that may contain a season suffix.
 
     Examples:
-        "The Rookie Season 08" → "The Rookie"
+        "A Show Season 08" → "A Show"
         "Show S01" → "Show"
         "Plain Directory" → "Plain Directory" (unchanged)
     """
@@ -197,7 +197,7 @@ def _resolve_show_name(
             return _show_name_from_filename(filename)
         else:
             # Parent is not a pure season dir — check if it contains a season suffix
-            # (e.g., "The Rookie Season 08" → extract "The Rookie")
+            # (e.g., "A Show Season 08" → extract "A Show")
             extracted = _extract_show_from_dir_name(parent_name)
             if extracted != parent_name:
                 # Successfully stripped season suffix
