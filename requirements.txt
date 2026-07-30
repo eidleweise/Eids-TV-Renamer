@@ -1,0 +1,7 @@
+pytest>=6.0
+hypothesis>=6.0
+toml
+black
+flake8
+mypy
+coverage

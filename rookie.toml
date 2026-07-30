@@ -1,0 +1,58 @@
+# tvrenamer configuration for The Rookie
+#
+# All values here act as defaults. Any CLI flag overrides the corresponding
+# config value. Config keys match their CLI flag names:
+#
+#   Config key              CLI flag
+#   ----------              --------
+#   defaults.path           --path
+#   defaults.template       --template
+#   defaults.execute        --execute
+#   defaults.space_replacement  --space-replacement
+#   defaults.fetch_titles   --fetch-titles / --no-fetch-titles
+#   defaults.strict_windows --strict-windows
+#   defaults.exclude_patterns   --exclude (additive)
+#   providers.order         --providers
+
+[defaults]
+
+# Directory to scan for media files. Scanned recursively for video/subtitle files.
+path = "~/Videos/My Show/"
+
+# Filename template for renamed files. Available tokens:
+#   {show}    - Cleaned show name (e.g., "My Show")
+#   {season}  - Two-digit zero-padded season number (e.g., "06")  | alias: {s}
+#   {episode} - Two-digit zero-padded episode number (e.g., "03") | alias: {e}
+#   {title}   - Episode title from provider lookup (e.g., "Secrets and Lies") | alias: {t}
+#   {year}    - Show premiere year for disambiguation (e.g., "2018") | alias: {y}
+#   {ext}     - Original file extension including dot (e.g., ".mkv")
+template = "{show}-S{season}E{episode}-{title}{ext}"
+
+# Whether to perform actual renames (true) or just show a dry-run preview (false).
+# Use --execute on the CLI to override for a single run.
+execute = false
+
+# Replace spaces in generated filenames with underscores.
+# Options: "underscore" (spaces become _) or omit/empty to keep spaces.
+# Only affects the filename — directory names always keep spaces.
+space_replacement = "underscore"
+
+# Query online metadata providers (TVMaze, Wikidata, Wikipedia) for episode titles.
+# Set to false to rename without titles (offline/local-only mode).
+fetch_titles = true
+
+# Apply strict Windows filename rules (avoid reserved names like CON/NUL,
+# strip trailing dots/spaces). Useful when writing to NTFS/SMB shares.
+strict_windows = false
+
+# Glob patterns for files to skip during scanning. Matched against the file's
+# path relative to the scan root. Multiple patterns supported. CLI --exclude
+# flags are added to this list (union of both).
+# exclude_patterns = ["*sample*", "*extras*"]
+
+[providers]
+
+# Ordered list of metadata providers to query for episode titles.
+# The first provider to return a title wins; subsequent providers are not queried.
+# Available: "tvmaze" (no API key needed), "wikidata" (SPARQL), "wikipedia" (REST).
+order = ["tvmaze", "wikidata", "wikipedia"]
