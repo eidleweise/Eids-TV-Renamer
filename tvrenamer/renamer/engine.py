@@ -605,7 +605,33 @@ def _strip_lang_suffix(name: str) -> Tuple[str, Optional[str]]:
     return stem, None
 
 
-def _scan_and_classify(root, config, exclude_patterns, junk_extensions, max_files=100000):
+def _apply_name_resolver(show, year, name_resolver, resolver_cache):
+    """Apply an optional name resolver to a cleaned show title.
+
+    When ``name_resolver`` is None, returns ``show`` unchanged (default engine
+    behaviour). Otherwise the resolver is called at most once per distinct
+    ``show`` (memoized via ``resolver_cache``). Any exception is swallowed and
+    a WARNING logged, falling back to the cleaned ``show``; an empty/None result
+    also falls back to ``show``.
+    """
+    if name_resolver is None:
+        return show
+    if show in resolver_cache:
+        return resolver_cache[show]
+    try:
+        resolved = name_resolver(show, year)
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            "name resolver failed for %s: %s", show, e
+        )
+        resolved = show
+    if not resolved:
+        resolved = show
+    resolver_cache[show] = resolved
+    return resolved
+
+
+def _scan_and_classify(root, config, exclude_patterns, junk_extensions, max_files=100000, name_resolver=None):
     """Scan root directory, classify files, and group them by type.
 
     Returns (groups, immediate, subtitles) where:
@@ -620,6 +646,7 @@ def _scan_and_classify(root, config, exclude_patterns, junk_extensions, max_file
     groups = {}
     immediate = []
     subtitles = []
+    resolver_cache = {}
     files_processed = 0
 
     for dirpath, dirs, files in os.walk(root):
@@ -662,6 +689,7 @@ def _scan_and_classify(root, config, exclude_patterns, junk_extensions, max_file
             show_truncated = _truncate_at_se_marker(show_cleaned)
             show_no_year, year = _extract_year(show_truncated)
             show = _title_case(show_no_year)
+            show = _apply_name_resolver(show, year, name_resolver, resolver_cache)
 
             se = _extract_season_episodes(fname)
             part = _detect_part(fname) or _detect_part(os.path.basename(dirpath))
@@ -922,6 +950,7 @@ def plan_renames(
     config: dict | None = None,
     strict_windows: bool = False,
     junk_extensions: set | None = None,
+    name_resolver=None,
 ) -> List[Tuple[str, str]]:
     """Scan root recursively and create a plan list of (src_abs, dst_abs) without performing actions.
 
@@ -936,6 +965,9 @@ def plan_renames(
         config: Parsed TOML config dict for extraction/cleaning settings.
         strict_windows: Pass through to sanitizer for Windows-compatible names.
         junk_extensions: Set of lowercase extensions considered junk (for classification only).
+        name_resolver: Optional callable (cleaned_show, year) -> str used to
+            substitute the cleaned show title before grouping/title lookup. When
+            None (the default), behaviour is unchanged.
     """
     if config is None:
         config = {}
@@ -955,7 +987,7 @@ def plan_renames(
 
     # 1. Scan and classify files
     groups, immediate, subtitles = _scan_and_classify(
-        root, config, exclude_patterns, junk_extensions
+        root, config, exclude_patterns, junk_extensions, name_resolver=name_resolver
     )
 
     # 2. Process grouped multipart files

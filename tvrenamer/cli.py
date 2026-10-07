@@ -30,6 +30,7 @@ from .renamer.engine import (
     VIDEO_EXTS,
     SUBTITLE_EXTS,
 )
+from .providers.chain import ProviderChain
 from .renamer.transaction import (
     execute_transaction,
     rollback_transaction,
@@ -171,6 +172,103 @@ def _display_preview(plan, args, use_color: bool):
 
     if conflict_count > 0 and getattr(args, "verbose", False):
         print(f"\n{conflict_count} conflict(s) required counter suffixes.")
+
+
+# --- Interactive manual naming ---
+
+
+def _prompt_for_show_name(cleaned_show, year, provider_chain, args, use_color):
+    """Prompt the user for a show name when the cleaned title can't be identified.
+
+    Returns a non-empty show title: either a user-typed candidate that was
+    identified against the providers, or ``cleaned_show`` on accept / skip /
+    EOF / Ctrl-C. Never raises.
+
+    Loop semantics (pinned):
+      - blank input (after strip) or 'a'/'A' -> accept the cleaned name
+      - 's'/'S' -> skip (keep the cleaned name)
+      - otherwise the stripped candidate is looked up via search_show; a hit
+        returns the candidate, a miss re-prompts.
+    Reserved tokens 'a'/'s' (any case) cannot be used as literal search terms.
+    """
+    logger = logging.getLogger(__name__)
+
+    if not args.quiet:
+        print(
+            f"\nShow \"{cleaned_show}\" could not be identified by the metadata providers.",
+            file=sys.stderr,
+        )
+        print("  [Enter a name] type a replacement to look up", file=sys.stderr)
+        print(f"  [a] accept \"{cleaned_show}\" as-is", file=sys.stderr)
+        print(f"  [s] skip (keep \"{cleaned_show}\", leave unidentified)", file=sys.stderr)
+
+    while True:
+        try:
+            raw = input("Show name: ")
+        except (EOFError, KeyboardInterrupt):
+            return cleaned_show
+
+        candidate = raw.strip()
+        low = candidate.lower()
+        if candidate == "" or low == "a":
+            return cleaned_show
+        if low == "s":
+            return cleaned_show
+        if len(candidate) > 200:
+            if not args.quiet:
+                print("name too long, try again", file=sys.stderr)
+            continue
+
+        try:
+            hit = provider_chain.search_show(candidate, year)
+        except Exception as e:
+            logger.warning(
+                "show identification lookup failed for %s: %s", candidate, e
+            )
+            if not args.quiet:
+                print("Lookup failed, try again.", file=sys.stderr)
+            continue
+
+        if hit:
+            if not args.quiet:
+                print(f"Identified as {candidate}.", file=sys.stderr)
+            return candidate
+
+        if not args.quiet:
+            print(f"Could not identify '{candidate}'.", file=sys.stderr)
+
+
+def _build_name_resolver(provider_chain, args, use_color):
+    """Build a name_resolver closure for plan_renames.
+
+    For each distinct cleaned show title it first tries to identify the title
+    as-is via ``search_show``; on a hit the cleaned name is kept, on a miss the
+    interactive loop runs. Answers are cached per cleaned_show so a show is
+    asked about at most once per run. Never raises.
+    """
+    logger = logging.getLogger(__name__)
+    answers = {}
+
+    def resolver(cleaned_show, year):
+        if cleaned_show in answers:
+            return answers[cleaned_show]
+        try:
+            hit = provider_chain.search_show(cleaned_show, year=year)
+        except Exception as e:
+            logger.warning(
+                "show identification lookup failed for %s: %s", cleaned_show, e
+            )
+            hit = None
+        if hit:
+            answers[cleaned_show] = cleaned_show
+            return cleaned_show
+        chosen = _prompt_for_show_name(
+            cleaned_show, year, provider_chain, args, use_color
+        )
+        answers[cleaned_show] = chosen
+        return chosen
+
+    return resolver
 
 
 # --- Crash Recovery ---
@@ -324,6 +422,12 @@ def main(argv=None):
     p.add_argument(
         "--no-color", action="store_true", default=False,
         help="Disable ANSI colour output",
+    )
+
+    # Interactive naming opt-out
+    p.add_argument(
+        "--no-interactive-naming", action="store_true", default=False,
+        help="Skip prompting to manually name shows that can't be identified",
     )
 
     # Resume / rollback
@@ -615,6 +719,19 @@ def _run(args):
         if exclude_patterns:
             print(f"Exclude patterns: {exclude_patterns}", file=sys.stderr)
 
+    # Build the interactive name resolver only when the full gate opens.
+    name_resolver = None
+    interactive_naming = (
+        fetch_titles
+        and args.interactive
+        and not args.quiet
+        and not getattr(args, "no_interactive_naming", False)
+        and hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+    )
+    if interactive_naming:
+        resolver_chain = ProviderChain(providers, cache=cache)
+        name_resolver = _build_name_resolver(resolver_chain, args, use_color)
+
     # Plan renames
     plan = plan_renames(
         root,
@@ -627,6 +744,7 @@ def _run(args):
         config=config,
         strict_windows=strict_windows,
         junk_extensions=junk_extensions,
+        name_resolver=name_resolver,
     )
 
     if not plan:
