@@ -120,9 +120,19 @@ def _is_season_dir(name: str) -> Optional[int]:
     return None
 
 
-# Pattern for season suffix embedded in a directory name like "A Show Season 08"
+# Pattern for season suffix embedded in a directory name like "A Show Season 08".
+# The captured season number is validated against the project's valid-season
+# notion (see ``_is_season_dir``) so a trailing season-zero ("S0") or any
+# Pattern for a season suffix embedded in a directory name like "A Show
+# Season 08" or "Show S01". The season token must be a *standalone* token —
+# preceded by a whitespace/separator boundary — so a name without a real
+# boundary (e.g. "0S1", where "S1" is glued to a digit) is left untouched.
+# The captured season number is validated against the project's valid-season
+# notion (see ``_is_season_dir``) so a trailing season-zero ("S0") is NOT
+# stripped either.
 _SEASON_SUFFIX_RE = re.compile(
-    r"^(?P<show>.+?)\s*[\s._-]*(?:season[\s._-]*\d{1,2}|[sS]\d{1,2})$", re.IGNORECASE
+    r"^(?P<show>.+?)[\s._-]+(?:season[\s._-]*(?P<snum>\d{1,2})|[sS](?P<snum2>\d{1,2}))$",
+    re.IGNORECASE,
 )
 
 
@@ -133,10 +143,16 @@ def _extract_show_from_dir_name(name: str) -> str:
         "A Show Season 08" → "A Show"
         "Show S01" → "Show"
         "Plain Directory" → "Plain Directory" (unchanged)
+        "0S0" → "0S0" (season zero is not a valid season, left unchanged)
+        "0S1" → "0S1" (no token boundary before "S1", left unchanged)
     """
     m = _SEASON_SUFFIX_RE.match(name.strip())
     if m:
-        return m.group("show").strip()
+        num_str = m.group("snum") or m.group("snum2")
+        # Only strip the suffix when it is a valid season (season zero is
+        # rejected, matching the behaviour of ``_is_season_dir``).
+        if num_str is not None and int(num_str) > 0:
+            return m.group("show").strip()
     return name
 
 
