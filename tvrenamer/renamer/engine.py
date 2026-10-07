@@ -94,6 +94,16 @@ _SE_MARKER_RE = re.compile(
     r"[sS]\d{1,2}[eE]\d|(?<!\d)\d{1,2}x\d{1,2}", re.IGNORECASE
 )
 
+# Standalone season token used only to truncate a show *title* at its season
+# boundary (e.g. "My Show S01 ..." → "My Show", "Show Season 08" → "Show").
+# The lookarounds enforce a token boundary so a bare "S" or a title like
+# "S.W.A.T." (normalized to "S W A T", no attached digits) is NOT matched —
+# only an "S" immediately followed by 1-2 digits as a standalone token.
+_SE_TRUNCATE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:[sS]\d{1,2}|season[\s._-]*\d{1,2})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
 
 def _is_season_dir(name: str) -> Optional[int]:
     """Return season number if name matches a season directory pattern, else None.
@@ -300,6 +310,37 @@ def _strip_scene_tags(name: str, config: Optional[dict] = None) -> str:
     # Collapse whitespace
     result = re.sub(r"\s+", " ", result).strip()
     return result
+
+
+def _truncate_at_se_marker(name: str) -> str:
+    """Truncate a show name at the first season/episode marker.
+
+    Keeps everything before the earliest of a standalone season token
+    (``S01``, ``Season 08``) or an SxxExx / NxNN marker, so only the real
+    title is sent to a metadata provider.
+
+    Example (post-separator-normalization input):
+        "My Show S01 COMPLETE DSNP WEB DL DDP5 1 Atmos H 264" → "My Show"
+
+    Conservative: if neither marker matches, the name is returned unchanged
+    (a plain "My Show" stays "My Show"); if truncation would leave an empty
+    string, the original name is returned.
+    """
+    season_match = _SE_TRUNCATE_RE.search(name)
+    se_match = _SE_MARKER_RE.search(name)
+
+    starts = [m.start() for m in (season_match, se_match) if m is not None]
+    if not starts:
+        return name
+
+    cut = name[: min(starts)]
+    # Clean up residual separators/whitespace left by the cut
+    cut = re.sub(r"\s+", " ", cut).strip()
+    cut = re.sub(r"^[.\s_-]+|[.\s_-]+$", "", cut)
+
+    if not cut:
+        return name
+    return cut
 
 
 def _extract_year(name: str) -> Tuple[str, Optional[int]]:
@@ -602,7 +643,8 @@ def _scan_and_classify(root, config, exclude_patterns, junk_extensions, max_file
             # Resolve show name using the cleaning pipeline
             show_raw = _resolve_show_name(src, root, config)
             show_cleaned = _strip_scene_tags(show_raw, config)
-            show_no_year, year = _extract_year(show_cleaned)
+            show_truncated = _truncate_at_se_marker(show_cleaned)
+            show_no_year, year = _extract_year(show_truncated)
             show = _title_case(show_no_year)
 
             se = _extract_season_episodes(fname)
